@@ -1,0 +1,9 @@
+{
+  "appId": "ua.shkilnyi.avtobus",
+  "appName": "Шкільний автобус",
+  "webDir": "www",
+  "backgroundColor": "#EDEFEA",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "force"
+  }
+}

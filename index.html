@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F2B705">
+<style>:root{color-scheme:light;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Шкільний автобус</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Oswald:wght@500;600&display=swap">
+<style>
+/* Layout: one-column phone tool. Sticky top block with the "in the bus" counter and a route line of stop markers;
+   below it the children of the current stop with large tap targets; bottom tab bar switches trip / lists. */
+:root{
+  --bg:#EDEFEA;
+  --surface:#FFFFFF;
+  --ink:#14181F;
+  --muted:#59626D;
+  --line:#D3D8D0;
+  --accent:#F2B705;
+  --on-accent:#14181F;
+  --ok:#1B7F46;
+  --ok-bg:#DCEFE3;
+  --bad:#B82A2A;
+  --bad-bg:#FBE0DC;
+  --warn-bg:#FFF0BD;
+  --f-display:'Oswald','Arial Narrow',Impact,sans-serif;
+  --f-body:'Golos Text',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1317;--surface:#1A2027;--ink:#ECEFF2;--muted:#9AA4AF;--line:#2B333C;
+    --accent:#F2B705;--on-accent:#14181F;--ok:#4CC587;--ok-bg:#16301F;--bad:#FF7A6E;--bad-bg:#3A1714;--warn-bg:#3A3110;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1317;--surface:#1A2027;--ink:#ECEFF2;--muted:#9AA4AF;--line:#2B333C;
+  --accent:#F2B705;--on-accent:#14181F;--ok:#4CC587;--ok-bg:#16301F;--bad:#FF7A6E;--bad-bg:#3A1714;--warn-bg:#3A3110;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.4;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:0 110px;
+}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+#app{max-width:560px;margin:0 auto}
+h1,h2,h3,p{margin:0}
+button{font-family:inherit}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+
+/* sticky head */
+.head{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding-block:8px 4px}
+.count-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.count{font:600 48px/1 var(--f-display);font-variant-numeric:tabular-nums}
+.count small{font:500 18px var(--f-display);color:var(--muted);margin-left:6px}
+.mode-tag{font:500 15px var(--f-display);letter-spacing:.04em;text-transform:uppercase;text-align:right;color:var(--muted)}
+
+/* route line */
+.route{display:flex;overflow-x:auto;padding-block:10px 6px;scrollbar-width:none}
+.route::-webkit-scrollbar{display:none}
+.pt{flex:0 0 78px;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;background:none;border:0;color:var(--ink);padding:0;cursor:pointer;min-width:0}
+.pt::before{content:"";position:absolute;top:15px;left:-50%;width:100%;height:3px;background:var(--line)}
+.pt:first-child::before{display:none}
+.pt.done::before,.pt.cur::before{background:var(--ink)}
+.dot{width:32px;height:32px;border-radius:50%;border:3px solid var(--ink);background:var(--bg);display:grid;place-items:center;font:600 14px var(--f-display);position:relative;z-index:1}
+.pt.done .dot{background:var(--ink);color:var(--bg)}
+.pt.cur .dot{background:var(--accent);color:var(--on-accent);transform:scale(1.15)}
+.nm{font-size:11px;line-height:1.2;text-align:center;max-width:72px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--muted)}
+.pt.cur .nm{color:var(--ink);font-weight:600}
+
+/* segmented mode switch */
+.seg{display:grid;grid-template-columns:1fr 1fr;border:2px solid var(--ink);border-radius:10px;overflow:hidden;margin-top:14px}
+.seg button{min-height:48px;border:0;background:transparent;color:var(--ink);font-weight:600;font-size:15px;cursor:pointer;padding:0 8px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+
+/* current stop */
+.stop-title{margin-top:18px;display:flex;flex-direction:column;gap:2px}
+.stop-title h2{font:600 30px/1.1 var(--f-display);text-wrap:balance;overflow-wrap:anywhere}
+.stop-title .cap{color:var(--muted);font-size:15px}
+.list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.kid{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;min-height:68px}
+.kid.on{border-color:var(--ok);background:var(--ok-bg)}
+.kid.abs{opacity:.75}
+.who{flex:1;min-width:0}
+.who .n{font-weight:600;font-size:17px;overflow-wrap:anywhere}
+.who .s{font-size:13px;color:var(--muted)}
+.kid.on .who .s{color:var(--ok);font-weight:600}
+.acts{display:flex;gap:8px;flex:0 0 auto}
+
+.btn{min-height:48px;padding:0 16px;border-radius:8px;border:2px solid var(--ink);background:transparent;color:var(--ink);font-weight:600;font-size:16px;cursor:pointer}
+.btn.pri{background:var(--accent);color:var(--on-accent)}
+.btn.sm{min-height:40px;padding:0 12px;font-size:14px}
+.btn.bad{border-color:var(--bad);color:var(--bad)}
+.btn.solid-bad{background:var(--bad);border-color:var(--bad);color:var(--bg)}
+.btn.wide{width:100%}
+
+.nav{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:18px}
+.alert{margin-top:16px;border:2px solid var(--ink);background:var(--warn-bg);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.alert.sev{border-color:var(--bad);background:var(--bad-bg)}
+.alert b{font-weight:600}
+.alert .row{display:flex;gap:8px;flex-wrap:wrap}
+.alert .row .btn{flex:1 1 140px}
+.link{background:none;border:0;color:var(--muted);text-decoration:underline;font-size:14px;min-height:44px;cursor:pointer;margin-top:10px;padding:0}
+details.more{margin-top:16px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+details.more summary{min-height:48px;display:flex;align-items:center;padding:0 12px;font-weight:600;cursor:pointer}
+details.more .list{padding:0 10px 10px;margin-top:0}
+.banner{margin-top:14px;border:2px dashed var(--ink);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:14px}
+.empty{margin-top:28px;display:flex;flex-direction:column;gap:12px}
+.empty h2{font:600 26px/1.15 var(--f-display)}
+.empty p{color:var(--muted)}
+
+/* summary */
+.sum{margin-top:18px;display:flex;flex-direction:column;gap:12px}
+.sum h2{font:600 30px/1.1 var(--f-display)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px}
+.stat b{display:block;font:600 34px/1 var(--f-display);font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+textarea.rep{width:100%;min-height:170px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:14px/1.5 var(--f-body);padding:10px;resize:vertical}
+
+/* setup */
+.card{margin-top:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.card h3{font:600 20px/1.1 var(--f-display)}
+.field{width:100%;min-height:48px;border:2px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:16px var(--f-body);padding:0 12px}
+.field:focus{border-color:var(--ink);outline:none}
+.srow{display:flex;gap:6px;align-items:center}
+.srow .num{flex:0 0 32px;height:32px;border-radius:50%;background:var(--ink);color:var(--bg);display:grid;place-items:center;font:600 14px var(--f-display)}
+.srow .field{flex:1;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:flex;align-items:center;gap:2px;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding-left:12px}
+.chip button{width:40px;height:40px;border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer}
+.addrow{display:flex;gap:8px}
+.addrow .field{flex:1;min-width:0}
+.hint{font-size:13px;color:var(--muted)}
+.ord{display:flex;gap:4px}
+.ord button{width:40px;height:40px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:16px;cursor:pointer}
+.ord button:disabled{opacity:.35;cursor:default}
+
+.cl{font:500 12px var(--f-body);color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:4px;white-space:nowrap}
+.notify{margin-top:14px}
+textarea.rep.msg{min-height:96px}
+/* tab bar */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);
+  padding:6px max(16px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-right,0px))}
+.tabs div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tabs button{min-height:52px;border:2px solid transparent;border-radius:10px;background:transparent;color:var(--muted);font-weight:600;font-size:15px;cursor:pointer}
+.tabs button[aria-current="page"]{background:var(--accent);color:var(--on-accent)}
+@media (prefers-reduced-motion:no-preference){.pt .dot{transition:transform .15s}}
+</style>
+
+</head>
+<body>
+<div id="app"></div>
+<nav class="tabs" aria-label="Розділи"><div>
+  <button type="button" data-act="tab" data-v="trip" id="tab-trip">Рейс</button>
+  <button type="button" data-act="tab" data-v="setup" id="tab-setup">Діти й зупинки</button>
+</div></nav>
+
+<script>
+(function(){
+'use strict';
+var KEY='zhurnal-posadky-v2';
+function uid(){return Math.random().toString(36).slice(2,9);}
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function newTrip(mode){return {mode:mode||'morning',idx:0,st:{},done:false};}
+var SEED=[{"n": "Межиріч (Підсобне)", "k": [["Урбан Христина", "4"], ["Урбан Вікторія", "8"]]}, {"n": "Кам’янка", "k": [["Курачик Катерина", "1"], ["Юр’єв Станіслав", "5"], ["Турчинська Діана", "6"], ["Семенюк Володимир", "7"], ["Коваль Марта", "8"], ["Дмитрук Марія", "10"], ["Тарасюк Олександра", "5"], ["Галімська Вероніка", "6"], ["Зелінський Адріан", "7"], ["Дацюк Софія", "8"], ["Сивук Костянтин", "9"], ["Зелінська Аріанна", "10"], ["Сивук Марія", "10"], ["Лук’янчук Назар", "11"]]}, {"n": "Антонівка", "k": [["Антіпов Богдан", "1"], ["Криницька Варвара", "1"], ["Фаєнко Мілана", "1"], ["Ступак Анастасія", "3"], ["Ліщук Ілля", "4"], ["Новоградська Ірина", "4"], ["Фабричнов Ілля", "5"], ["Антіпова Марія", "7"], ["Новоградська Оксана", "7"], ["Свирида Артур", "7"], ["Свирида Максим", "9"], ["Сакал Яна", "10"], ["Соколовський Максим", "10"], ["Антіпова Дарія", "11"], ["Новоградський Михайло", "11"], ["Марчук Вероніка", "11"]]}, {"n": "Болотківці", "k": [["Данилюк Костянтин", "6"], ["Оропай Ксенія", "7"], ["Бондар Ольга", "9"], ["Рибак Яна", "9"], ["Москалюк Микола", "10"], ["Шостак Наталія", "11"]]}, {"n": "Вілія", "k": [["Добровольська Єва", "4"], ["Дем’янчук Софія", "7"], ["Добровольська Уляна", "8"], ["Добровольський Ілля", "10"], ["Момотюк Олександр", "10"], ["Зарічна Віка", "10"], ["Хоменчук Софія", "10"], ["Третяк Анастасія", "10"], ["Мельниченко Олег", "11"], ["Семенюк Дар’я", "11"], ["Хоменчук Вікторія", "11"]]}, {"n": "Долочче", "k": [["Галімський Стас", "3"], ["Ткаченко Давид", "3"], ["Балабей Михайло", "4"], ["Андрієвська Діана", "4"], ["Ілючок Вікторія", "4"], ["Андрієвський Кирило", "6"], ["Гончар Христина", "7"], ["Рябіцький Дмитро", "7"], ["Стратюк Анатолій", "7"], ["Андрієвська Ангеліна", "8"], ["Балабей Марія", "9"], ["Стратюк Захар", "9"], ["Гончар Анастасія", "9"], ["Коваленко Андрій", "9"], ["Мукосієнко Каріна", "10"], ["Рачковська Соломія", "7"], ["Перчук Єлизавета", "8"], ["Ричківський Артем", "10"]]}];
+function seed(){
+  var stops=[],kids=[];
+  SEED.forEach(function(g){var id=uid();stops.push({id:id,name:g.n});g.k.forEach(function(x){kids.push({id:uid(),name:x[0],cls:x[1],stop:id});});});
+  return {data:{school:'Школа',stops:stops,kids:kids,example:false,names:true},trip:newTrip('morning')};
+}
+function load(){
+  try{
+    var r=localStorage.getItem(KEY);
+    if(r){var o=JSON.parse(r);if(o&&o.data&&o.trip&&Array.isArray(o.data.stops)&&Array.isArray(o.data.kids))return o;}
+  }catch(e){}
+  return seed();
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+var S=load();
+var ui={tab:'trip',warn:null,confirm:null,delStop:null,copied:false,msg:null,copied2:false};
+var app=document.getElementById('app');
+
+function now(){return new Date().toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});}
+function stopById(id){return S.data.stops.filter(function(s){return s.id===id;})[0];}
+function pointsList(){
+  var school={id:'school',name:S.data.school||'Школа',school:true};
+  var st=S.data.stops;
+  return S.trip.mode==='morning'?st.concat([school]):[school].concat(st.slice().reverse());
+}
+function kst(id){return S.trip.st[id]||{s:'wait'};}
+function setK(id,patch){var o={};var cur=kst(id);for(var k in cur)o[k]=cur[k];for(var j in patch)o[j]=patch[j];S.trip.st[id]=o;save();}
+function kidsWhere(fn){return S.data.kids.filter(function(k){return fn(kst(k.id).s,k);});}
+function names(list){return list.map(function(k){return k.name;}).join(', ');}
+function onboard(){return kidsWhere(function(s){return s==='on';});}
+
+function rowsFor(p){
+  var m=S.trip.mode,k=S.data.kids;
+  if(m==='morning')return p.school?kidsWhere(function(s){return s==='on'||s==='off';}):k.filter(function(x){return x.stop===p.id;});
+  return p.school?k:k.filter(function(x){return x.stop===p.id;});
+}
+
+function caption(p,rows){
+  var m=S.trip.mode;
+  function c(arr,fn){return arr.filter(function(k){return fn(kst(k.id).s);}).length;}
+  var abs=c(rows,function(s){return s==='abs';});
+  var absTxt=abs?' · Немає: '+abs:'';
+  if(m==='morning'&&!p.school)return 'Зайшло '+c(rows,function(s){return s==='on'||s==='off';})+' з '+rows.length+absTxt;
+  if(m==='morning'&&p.school)return 'Вийшло '+c(rows,function(s){return s==='off';})+' з '+rows.length;
+  if(m==='afternoon'&&p.school)return 'Зайшло '+c(rows,function(s){return s==='on'||s==='off';})+' з '+rows.length+absTxt;
+  var rode=c(rows,function(s){return s==='on'||s==='off';});
+  return 'Вийшло '+c(rows,function(s){return s==='off';})+' з '+rode+' на цій зупинці';
+}
+
+function clsTag(k){return k.cls?' <span class="cl">'+esc(k.cls)+' кл.</span>':'';}
+function rowHtml(k,p){
+  var s=kst(k.id),m=S.trip.mode,sch=!!p.school;
+  var st=stopById(k.stop);
+  var cls='',sub=sch&&st?'Зупинка: '+st.name:'',acts='';
+  var id=' data-id="'+k.id+'"';
+  var boardCtx=(m==='morning'&&!sch)||(m==='afternoon'&&sch);
+  var undo='<button type="button" class="btn sm" data-act="undo"'+id+'>Скасувати</button>';
+  if(boardCtx){
+    if(s.s==='wait')acts='<button type="button" class="btn pri" data-act="board"'+id+'>Зайшов</button><button type="button" class="btn sm" data-act="absent"'+id+'>Немає</button>';
+    else if(s.s==='abs'){cls='abs';sub='Немає в автобусі';acts=undo;}
+    else{cls='on';sub='Зайшов о '+(s.tin||'');if(s.s==='off')sub+=' · вийшов о '+(s.tout||'');acts=undo;}
+  }else if(m==='morning'){
+    if(s.s==='on')acts='<button type="button" class="btn pri" data-act="exit"'+id+'>Вийшов</button>';
+    else if(s.s==='off'){cls='on';sub='Вийшов о '+(s.tout||'');acts=undo;}
+  }else{
+    if(s.s==='on')acts='<button type="button" class="btn pri" data-act="exit"'+id+'>Вийшов</button>';
+    else if(s.s==='off'){cls='on';sub='Вийшов о '+(s.tout||'');acts=undo;}
+    else if(s.s==='abs'){cls='abs';sub='Не їхав(ла) сьогодні';}
+    else sub='Ще не відмічений(а) в автобусі';
+  }
+  return '<div class="kid '+cls+'"><div class="who"><div class="n">'+esc(k.name)+clsTag(k)+'</div>'+(sub?'<div class="s">'+esc(sub)+'</div>':'')+'</div><div class="acts">'+acts+'</div></div>';
+}
+
+function issues(){
+  var pts=pointsList(),p=pts[S.trip.idx],last=S.trip.idx===pts.length-1,m=S.trip.mode;
+  var onb=onboard();
+  if(last){
+    if(onb.length)return {sev:true,msg:'У салоні залишились діти. Перевірте весь автобус, особливо задні сидіння.',list:onb,abs:false};
+    var w=rowsFor(p).filter(function(k){return kst(k.id).s==='wait';});
+    if(w.length&&m==='afternoon'&&p.school)return {sev:false,msg:'Не відмічені:',list:w,abs:true};
+    return null;
+  }
+  if(m==='morning'&&!p.school){
+    var wm=rowsFor(p).filter(function(k){return kst(k.id).s==='wait';});
+    if(wm.length)return {sev:false,msg:'Не відмічені на цій зупинці:',list:wm,abs:true};
+  }
+  if(m==='afternoon'&&p.school){
+    var wa=S.data.kids.filter(function(k){return kst(k.id).s==='wait';});
+    if(wa.length)return {sev:false,msg:'Не відмічені в автобусі:',list:wa,abs:true};
+  }
+  if(m==='afternoon'&&!p.school){
+    var nx=rowsFor(p).filter(function(k){return kst(k.id).s==='on';});
+    if(nx.length)return {sev:true,msg:'Не вийшли на своїй зупинці:',list:nx,abs:false};
+  }
+  return null;
+}
+
+function firstName(k){var p=k.name.trim().split(/\s+/);return p.length>1?p[1]:p[0];}
+function kidsWord(n){var m=n%10,h=n%100;if(m===1&&h!==11)return 'дитина';if(m>=2&&m<=4&&(h<10||h>=20))return 'дитини';return 'дітей';}
+function who(list){return list.map(function(k){return firstName(k)+(k.cls?' ('+k.cls+' кл.)':'');}).join(', ');}
+function part(out,label,list){
+  if(!list.length)return;
+  out.push(S.data.names===false?label+': '+list.length+' '+kidsWord(list.length)+'.':label+': '+who(list)+'.');
+}
+function parentMsg(){
+  var t=S.trip,p=pointsList()[t.idx],m=t.mode,rows=rowsFor(p);
+  function f(fn){return rows.filter(function(k){return fn(kst(k.id).s);});}
+  var out=[(m==='morning'?'Ранок':'Після уроків')+', '+(p.school?p.name:'зупинка «'+p.name+'»')+', '+now()+'.'];
+  if(m==='morning'&&!p.school){part(out,'Зайшли',f(function(s){return s==='on'||s==='off';}));part(out,'Не було',f(function(s){return s==='abs';}));}
+  else if(m==='morning'){part(out,'Вийшли в школі',f(function(s){return s==='off';}));}
+  else if(p.school){part(out,'Зайшли',f(function(s){return s==='on'||s==='off';}));part(out,'Не було',f(function(s){return s==='abs';}));}
+  else{part(out,'Вийшли',f(function(s){return s==='off';}));}
+  if(out.length===1)out.push('На цій зупинці нікого зі списку.');
+  return out.join(' ');
+}
+function parentSum(){
+  var k=S.data.kids,m=S.trip.mode;
+  var abs=k.filter(function(x){return kst(x.id).s==='abs';}).length;
+  var s=(m==='morning'?'Ранок':'Після уроків')+', '+new Date().toLocaleDateString('uk-UA')+'. Усі діти доставлені '+(m==='morning'?'до школи':'додому')+' о '+now()+'.';
+  if(abs)s+=' Не їхали: '+abs+' '+kidsWord(abs)+'.';
+  return s;
+}
+function msgHtml(){
+  if(!ui.msg)return '';
+  return '<div class="card"><div class="lbl">Повідомлення для Viber</div><textarea class="rep msg" id="msg" readonly aria-label="Повідомлення для батьків">'+esc(ui.msg)+'</textarea>'+
+    '<div class="addrow"><button type="button" class="btn pri" data-act="copymsg">'+(ui.copied2?'Скопійовано':'Скопіювати')+'</button><button type="button" class="btn" data-act="closemsg">Закрити</button></div></div>';
+}
+function copyMsg(){
+  var ta=document.getElementById('msg');
+  var sel=function(){if(ta){ta.focus();ta.select();}};
+  try{navigator.clipboard.writeText(ui.msg).then(function(){ui.copied2=true;render();},sel);}catch(err){sel();}
+}
+function bannerHtml(){
+  if(!S.data.example)return '';
+  return '<div class="banner"><div><b>Це приклад.</b> Імена вигадані. Щоб почати, очистіть приклад і додайте свою школу, зупинки та дітей.</div>'+
+    '<div><button type="button" class="btn sm" data-act="clearex">Очистити приклад</button></div></div>';
+}
+
+function modeSeg(){
+  var m=S.trip.mode;
+  return '<div class="seg" role="group" aria-label="Напрямок рейсу">'+
+    '<button type="button" data-act="mode" data-v="morning" aria-pressed="'+(m==='morning')+'">Ранок · до школи</button>'+
+    '<button type="button" data-act="mode" data-v="afternoon" aria-pressed="'+(m==='afternoon')+'">Після уроків · додому</button></div>';
+}
+
+function confirmHtml(){
+  if(!ui.confirm)return '';
+  var txt=ui.confirm==='reset'?'Скинути всі відмітки цього рейсу?':'Змінити напрямок? Відмітки поточного рейсу буде скинуто.';
+  return '<div class="alert"><b>'+txt+'</b><div class="row"><button type="button" class="btn bad" data-act="cyes">Так, скинути</button><button type="button" class="btn" data-act="cno">Ні, залишити</button></div></div>';
+}
+
+function renderTrip(){
+  var d=S.data,t=S.trip,pts=pointsList();
+  if(!d.stops.length||!d.kids.length){
+    return bannerHtml()+'<div class="empty"><h2>Спершу додайте зупинки й дітей</h2><p>Це робиться один раз. Далі кожного рейсу лишається тільки відмічати дітей.</p><div><button type="button" class="btn pri" data-act="tab" data-v="setup">Відкрити список</button></div></div>';
+  }
+  if(t.idx>=pts.length)t.idx=pts.length-1;
+  if(t.idx<0)t.idx=0;
+  if(t.done)return renderSummary();
+  var p=pts[t.idx],last=t.idx===pts.length-1,rows=rowsFor(p);
+  var onb=onboard();
+
+  var route=pts.map(function(q,i){
+    var cls=i<t.idx?'done':(i===t.idx?'cur':'');
+    var lab=q.school?'Ш':String(d.stops.indexOf(q)+1);
+    return '<button type="button" class="pt '+cls+'" data-act="jump" data-i="'+i+'"'+(i===t.idx?' aria-current="step"':'')+'><span class="dot">'+lab+'</span><span class="nm">'+esc(q.name)+'</span></button>';
+  }).join('');
+
+  var head='<div class="head"><div class="count-row"><div><div class="lbl">У автобусі</div><div class="count">'+onb.length+'<small>з '+d.kids.length+'</small></div></div>'+
+    '<div class="mode-tag">'+(t.mode==='morning'?'Ранок':'Після уроків')+'<br>'+esc(now())+'</div></div><div class="route" id="route">'+route+'</div></div>';
+
+  var title=(p.school?'':'Зупинка '+(d.stops.indexOf(p)+1)+' · ')+p.name;
+  var list=rows.length?rows.map(function(k){return rowHtml(k,p);}).join(''):'<div class="hint">На цій зупинці немає дітей зі списку.</div>';
+
+  var more='';
+  if(t.mode==='afternoon'&&!p.school){
+    var other=onb.filter(function(k){return k.stop!==p.id;});
+    if(other.length){
+      more='<details class="more"><summary>Інші діти в салоні · '+other.length+'</summary><div class="list">'+other.map(function(k){
+        var st=stopById(k.stop);
+        return '<div class="kid"><div class="who"><div class="n">'+esc(k.name)+'</div><div class="s">Їде до: '+esc(st?st.name:'—')+'</div></div><div class="acts"><button type="button" class="btn sm" data-act="exit" data-id="'+k.id+'">Вийшов тут</button></div></div>';
+      }).join('')+'</div></details>';
+    }
+  }
+
+  var warn='';
+  if(ui.warn){
+    var w=ui.warn;
+    warn='<div class="alert'+(w.sev?' sev':'')+'" role="alert"><div><b>'+esc(w.msg)+'</b><br>'+esc(names(w.list))+'</div><div class="row">'+
+      '<button type="button" class="btn pri" data-act="wstay">Залишитись</button>'+
+      (w.abs?'<button type="button" class="btn" data-act="wabs">Позначити «Немає» і далі</button>':'')+
+      '<button type="button" class="btn'+(w.sev?' bad':'')+'" data-act="wgo">'+(last?'Завершити все одно':'Їхати далі все одно')+'</button></div></div>';
+  }
+
+  var nav='<div class="nav"><button type="button" class="btn" data-act="prev"'+(t.idx===0?' disabled':'')+'>← Назад</button>'+
+    '<button type="button" class="btn pri" data-act="next">'+(last?'Завершити рейс':'Їдемо далі →')+'</button></div>';
+
+  return head+modeSeg()+bannerHtml()+
+    '<div class="stop-title"><div class="lbl">'+(p.school?'Школа':'Поточна зупинка')+'</div><h2>'+esc(title)+'</h2><div class="cap">'+esc(caption(p,rows))+'</div></div>'+
+    '<div class="list">'+list+'</div>'+'<div class="notify"><button type="button" class="btn wide" data-act="notify">Повідомити батьків</button></div>'+msgHtml()+more+warn+confirmHtml()+nav+
+    '<div><button type="button" class="link" data-act="reset">Скинути відмітки рейсу</button></div>';
+}
+
+function reportText(){
+  var t=S.trip,k=S.data.kids;
+  var rode=k.filter(function(x){var s=kst(x.id).s;return s==='on'||s==='off';});
+  var abs=k.filter(function(x){return kst(x.id).s==='abs';});
+  var left=onboard();
+  var unm=k.filter(function(x){return kst(x.id).s==='wait';});
+  var L=['Рейс: '+(t.mode==='morning'?'ранок, до школи':'після уроків, додому')+', '+new Date().toLocaleDateString('uk-UA'),
+    'Перевезено: '+rode.length+' з '+k.length];
+  if(left.length)L.push('УВАГА, не вийшли з автобуса: '+names(left));
+  if(abs.length)L.push('Немає: '+names(abs));
+  if(unm.length)L.push('Без відмітки: '+names(unm));
+  L.push('');
+  rode.forEach(function(x){var s=kst(x.id);L.push(x.name+': зайшов '+(s.tin||'—')+', вийшов '+(s.tout||'—'));});
+  return L.join('\n');
+}
+
+function renderSummary(){
+  var k=S.data.kids;
+  var rode=k.filter(function(x){var s=kst(x.id).s;return s==='on'||s==='off';}).length;
+  var abs=k.filter(function(x){return kst(x.id).s==='abs';}).length;
+  var left=onboard();
+  var alert=left.length?'<div class="alert sev" role="alert"><div><b>У салоні залишились: </b>'+esc(names(left))+'</div><div class="row"><button type="button" class="btn bad" data-act="reopen">Повернутись до рейсу</button></div></div>':'';
+  return '<div class="sum"><div class="lbl">'+(S.trip.mode==='morning'?'Ранок · до школи':'Після уроків · додому')+'</div><h2>Рейс завершено</h2>'+
+    '<div class="stats"><div class="stat"><b>'+rode+'</b><span>перевезено</span></div><div class="stat"><b>'+abs+'</b><span>немає</span></div><div class="stat"><b>'+left.length+'</b><span>у салоні</span></div></div>'+
+    alert+
+    (left.length?'':'<button type="button" class="btn pri wide" data-act="notifysum">Повідомлення для батьків</button>')+msgHtml()+
+    '<textarea class="rep" id="rep" readonly aria-label="Звіт про рейс">'+esc(reportText())+'</textarea>'+
+    '<button type="button" class="btn wide" data-act="copy">'+(ui.copied?'Скопійовано':'Скопіювати звіт для себе')+'</button>'+
+    '<button type="button" class="btn pri wide" data-act="newtrip">Новий рейс</button></div>';
+}
+
+function renderSetup(){
+  var d=S.data;
+  var html=bannerHtml();
+  html+='<div class="card"><h3>Школа</h3><label class="hint" for="school">Кінцева зупинка вранці й початкова після уроків</label>'+
+    '<input class="field" id="school" data-field="school" type="text" value="'+esc(d.school||'')+'" autocomplete="off"></div>';
+  html+='<div class="card"><h3>Повідомлення батькам</h3><label class="srow" style="gap:12px;min-height:48px" for="names"><input type="checkbox" id="names" data-field="names" style="width:24px;height:24px"'+(d.names===false?'':' checked')+'><span>Вказувати імена дітей</span></label><div class="hint">Якщо вимкнути, у повідомленні буде лише кількість дітей. Прізвища в повідомлення не потрапляють.</div></div>';
+  html+='<p class="hint" style="margin-top:14px">Зупинки йдуть у порядку, яким автобус їде вранці. Після уроків маршрут автоматично іде у зворотному порядку.</p>';
+  d.stops.forEach(function(s,i){
+    var kids=d.kids.filter(function(k){return k.stop===s.id;});
+    html+='<div class="card"><div class="srow"><span class="num">'+(i+1)+'</span>'+
+      '<input class="field" data-field="stop" data-id="'+s.id+'" type="text" value="'+esc(s.name)+'" aria-label="Назва зупинки '+(i+1)+'" autocomplete="off">'+
+      '<div class="ord"><button type="button" data-act="up" data-id="'+s.id+'" aria-label="Вище"'+(i===0?' disabled':'')+'>↑</button>'+
+      '<button type="button" data-act="down" data-id="'+s.id+'" aria-label="Нижче"'+(i===d.stops.length-1?' disabled':'')+'>↓</button></div></div>'+
+      '<div class="chips">'+(kids.length?kids.map(function(k){return '<span class="chip">'+esc(k.name)+clsTag(k)+'<button type="button" data-act="delkid" data-id="'+k.id+'" aria-label="Видалити '+esc(k.name)+'">✕</button></span>';}).join(''):'<span class="hint">Дітей ще немає</span>')+'</div>'+
+      '<div class="addrow"><input class="field" id="add-'+s.id+'" data-enter="1" type="text" placeholder="Імена через кому" aria-label="Додати дітей на зупинку '+(i+1)+'" autocomplete="off">'+
+      '<button type="button" class="btn" data-act="addkids" data-id="'+s.id+'">Додати</button></div>'+
+      '<div><button type="button" class="btn sm bad" data-act="delstop" data-id="'+s.id+'">'+(ui.delStop===s.id?'Точно видалити зупинку й дітей?':'Видалити зупинку')+'</button></div></div>';
+  });
+  html+='<div class="card"><h3>Нова зупинка</h3><div class="addrow"><input class="field" id="newstop" data-enter="1" type="text" placeholder="Назва зупинки" autocomplete="off"><button type="button" class="btn pri" data-act="addstop">Додати</button></div></div>';
+  html+='<p class="hint" style="margin-top:14px">Список зберігається лише в цьому браузері на телефоні й нікуди не надсилається. Якщо очистити дані браузера, список доведеться ввести знову.</p>';
+  return html;
+}
+
+function render(){
+  document.getElementById('tab-trip').setAttribute('aria-current',ui.tab==='trip'?'page':'false');
+  document.getElementById('tab-setup').setAttribute('aria-current',ui.tab==='setup'?'page':'false');
+  app.innerHTML=ui.tab==='trip'?renderTrip():renderSetup();
+  var r=document.getElementById('route');
+  if(r){var c=r.querySelector('.cur');if(c)r.scrollLeft=c.offsetLeft-r.clientWidth/2+c.offsetWidth/2;}
+}
+
+function markAbsent(list){list.forEach(function(k){setK(k.id,{s:'abs'});});}
+function advance(){
+  var pts=pointsList();
+  ui.warn=null;
+  if(S.trip.idx>=pts.length-1){S.trip.done=true;ui.copied=false;}
+  else S.trip.idx++;
+  save();render();window.scrollTo(0,0);
+}
+
+app.addEventListener('click',function(e){
+  var el=e.target.closest('[data-act]');
+  if(!el)return;
+  var a=el.getAttribute('data-act'),id=el.getAttribute('data-id'),v=el.getAttribute('data-v');
+  if(a!=='delstop')ui.delStop=null;
+  if(['notify','copymsg','closemsg','notifysum'].indexOf(a)<0)ui.msg=null;
+  var t=S.trip,d=S.data;
+  if(a==='mode'){
+    if(v===t.mode)return;
+    if(Object.keys(t.st).length){ui.confirm='mode:'+v;}
+    else{S.trip=newTrip(v);save();}
+    render();return;
+  }
+  if(a==='reset'){ui.confirm='reset';render();return;}
+  if(a==='cno'){ui.confirm=null;render();return;}
+  if(a==='cyes'){
+    var mm=ui.confirm&&ui.confirm.indexOf('mode:')===0?ui.confirm.slice(5):t.mode;
+    S.trip=newTrip(mm);ui.confirm=null;ui.warn=null;save();render();return;
+  }
+  if(a==='jump'){t.idx=+el.getAttribute('data-i');ui.warn=null;save();render();return;}
+  if(a==='board'){setK(id,{s:'on',tin:now()});render();return;}
+  if(a==='absent'){setK(id,{s:'abs'});render();return;}
+  if(a==='exit'){setK(id,{s:'off',tout:now()});render();return;}
+  if(a==='undo'){
+    var cur=kst(id);
+    if(cur.s==='off')setK(id,{s:'on',tout:null});
+    else setK(id,{s:'wait',tin:null,tout:null});
+    render();return;
+  }
+  if(a==='prev'){if(t.idx>0){t.idx--;ui.warn=null;save();render();window.scrollTo(0,0);}return;}
+  if(a==='next'){
+    var iss=issues();
+    if(iss){ui.warn=iss;render();return;}
+    advance();return;
+  }
+  if(a==='wstay'){ui.warn=null;render();return;}
+  if(a==='wabs'){markAbsent(ui.warn.list);advance();return;}
+  if(a==='wgo'){advance();return;}
+  if(a==='notify'){ui.msg=parentMsg();ui.copied2=false;render();copyMsg();return;}
+  if(a==='notifysum'){ui.msg=parentSum();ui.copied2=false;render();copyMsg();return;}
+  if(a==='copymsg'){copyMsg();return;}
+  if(a==='closemsg'){ui.msg=null;render();return;}
+  if(a==='reopen'){t.done=false;ui.warn=null;save();render();return;}
+  if(a==='newtrip'){S.trip=newTrip(t.mode);ui.warn=null;save();render();window.scrollTo(0,0);return;}
+  if(a==='copy'){
+    var txt=reportText();
+    var ta=document.getElementById('rep');
+    var fallback=function(){if(ta){ta.focus();ta.select();}};
+    try{
+      navigator.clipboard.writeText(txt).then(function(){ui.copied=true;render();},fallback);
+    }catch(err){fallback();}
+    return;
+  }
+  if(a==='tab'){ui.tab=v;ui.warn=null;render();window.scrollTo(0,0);return;}
+  if(a==='clearex'){d.stops=[];d.kids=[];d.example=false;S.trip=newTrip(t.mode);save();ui.tab='setup';render();return;}
+  if(a==='addstop'){
+    var inp=document.getElementById('newstop'),nm=inp.value.trim();
+    if(!nm)return;
+    d.stops.push({id:uid(),name:nm});d.example=d.example;save();render();return;
+  }
+  if(a==='addkids'){
+    var box=document.getElementById('add-'+id);
+    var list=box.value.split(/[,;\n]+/).map(function(x){return x.trim();}).filter(Boolean);
+    if(!list.length)return;
+    list.forEach(function(n){d.kids.push({id:uid(),name:n,stop:id});});
+    save();render();return;
+  }
+  if(a==='delkid'){
+    d.kids=d.kids.filter(function(k){return k.id!==id;});
+    delete t.st[id];save();render();return;
+  }
+  if(a==='delstop'){
+    if(ui.delStop===id){
+      d.kids.filter(function(k){return k.stop===id;}).forEach(function(k){delete t.st[k.id];});
+      d.kids=d.kids.filter(function(k){return k.stop!==id;});
+      d.stops=d.stops.filter(function(s){return s.id!==id;});
+      ui.delStop=null;t.idx=0;save();render();
+    }else{ui.delStop=id;render();}
+    return;
+  }
+  if(a==='up'||a==='down'){
+    var i=d.stops.map(function(s){return s.id;}).indexOf(id),j=a==='up'?i-1:i+1;
+    if(i<0||j<0||j>=d.stops.length)return;
+    var tmp=d.stops[i];d.stops[i]=d.stops[j];d.stops[j]=tmp;
+    save();render();return;
+  }
+});
+
+app.addEventListener('change',function(e){
+  var el=e.target,f=el.getAttribute&&el.getAttribute('data-field');
+  if(!f)return;
+  if(f==='names'){S.data.names=el.checked;save();}
+  if(f==='school'){S.data.school=el.value.trim()||'Школа';save();}
+  if(f==='stop'){
+    var s=stopById(el.getAttribute('data-id'));
+    if(s&&el.value.trim()){s.name=el.value.trim();save();}
+  }
+});
+app.addEventListener('keydown',function(e){
+  if(e.key!=='Enter'||!e.target.hasAttribute||!e.target.hasAttribute('data-enter'))return;
+  var b=e.target.parentNode.querySelector('button[data-act]');
+  if(b)b.click();
+});
+
+async function wake(){
+  try{if(navigator.wakeLock&&document.visibilityState==='visible')await navigator.wakeLock.request('screen');}catch(err){}
+}
+wake();
+document.addEventListener('visibilitychange',wake);
+document.getElementById('tab-trip').addEventListener('click',function(){ui.tab='trip';render();});
+document.getElementById('tab-setup').addEventListener('click',function(){ui.tab='setup';render();});
+render();
+})();
+</script>
+</body>
+</html>
